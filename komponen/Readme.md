@@ -8,7 +8,7 @@ Proyek Tugas Besar — Kelas B, Kelompok 4
 - Farhan Nur Sahid (H1H024057)
 - Reva Aura Ramadhani (H1H024059)
 - Ahmadin Irfan Fauzi (H1H024060)
-- Ramadhanu Isnaera Ahnaf Wibawa (H1H024061)
+- Ramandhanu Isnaera Ahnaf Wibawa (H1H024061)
 
 ---
 
