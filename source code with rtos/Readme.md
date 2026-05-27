@@ -1,197 +1,219 @@
-```
 #include <Arduino.h>
-#include <ESP32Servo.h>
 
-// ==========================
+// ===============================
 // PIN CONFIGURATION
-// ==========================
-#define TRIG_PIN 5
-#define ECHO_PIN 18
-#define SERVO_PIN 19
+// ===============================
+#define TRIG_IN 5
+#define ECHO_IN 18
+
+#define TRIG_OUT 19
+#define ECHO_OUT 21
+
 #define LED_GREEN 2
 #define LED_RED 4
-#define BUZZER_PIN 15
 
-// ==========================
+#define BUZZER 15
+
+// ===============================
+// PARKING CONFIG
+// ===============================
+#define MAX_PARKING 10
+
+// ===============================
 // GLOBAL VARIABLE
-// ==========================
-Servo barrierServo;
+// ===============================
+int parkingCount = 0;
 
-float distanceCM = 0;
-bool vehicleDetected = false;
-bool gateOpen = false;
+bool fullParking = false;
 
-// ==========================
-// FUNCTION ULTRASONIC
-// ==========================
-float readDistance()
+float distanceIn = 0;
+float distanceOut = 0;
+
+// ===============================
+// READ ULTRASONIC FUNCTION
+// ===============================
+float readDistance(int trigPin, int echoPin)
 {
-    digitalWrite(TRIG_PIN, LOW);
+    digitalWrite(trigPin, LOW);
     delayMicroseconds(2);
 
-    digitalWrite(TRIG_PIN, HIGH);
+    digitalWrite(trigPin, HIGH);
     delayMicroseconds(10);
 
-    digitalWrite(TRIG_PIN, LOW);
+    digitalWrite(trigPin, LOW);
 
-    long duration = pulseIn(ECHO_PIN, HIGH);
+    long duration = pulseIn(echoPin, HIGH);
 
     float distance = duration * 0.034 / 2;
 
     return distance;
 }
 
-// ==========================
-// TASK SENSOR
-// ==========================
-void TaskSensor(void *pvParameters)
+// ===============================
+// TASK SENSOR MASUK
+// ===============================
+void TaskSensorIn(void *pvParameters)
 {
     while (1)
     {
-        distanceCM = readDistance();
+        distanceIn = readDistance(TRIG_IN, ECHO_IN);
 
-        if (distanceCM < 10)
+        if (distanceIn < 8)
         {
-            vehicleDetected = true;
-        }
-        else
-        {
-            vehicleDetected = false;
+            if (parkingCount < MAX_PARKING)
+            {
+                parkingCount++;
+
+                Serial.println("KENDARAAN MASUK");
+
+                vTaskDelay(2000 / portTICK_PERIOD_MS);
+            }
         }
 
         vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 }
 
-// ==========================
-// TASK BARRIER GATE
-// ==========================
-void TaskBarrier(void *pvParameters)
+// ===============================
+// TASK SENSOR KELUAR
+// ===============================
+void TaskSensorOut(void *pvParameters)
 {
     while (1)
     {
-        if (vehicleDetected)
+        distanceOut = readDistance(TRIG_OUT, ECHO_OUT);
+
+        if (distanceOut < 8)
         {
-            barrierServo.write(90);
+            if (parkingCount > 0)
+            {
+                parkingCount--;
 
-            digitalWrite(LED_GREEN, HIGH);
-            digitalWrite(LED_RED, LOW);
+                Serial.println("KENDARAAN KELUAR");
 
-            gateOpen = true;
-        }
-        else
-        {
-            barrierServo.write(0);
-
-            digitalWrite(LED_GREEN, LOW);
-            digitalWrite(LED_RED, HIGH);
-
-            gateOpen = false;
+                vTaskDelay(2000 / portTICK_PERIOD_MS);
+            }
         }
 
-        vTaskDelay(300 / portTICK_PERIOD_MS);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 }
 
-// ==========================
+// ===============================
 // TASK MONITORING
-// ==========================
+// ===============================
 void TaskMonitoring(void *pvParameters)
 {
     while (1)
     {
-        Serial.println("========== MBG STATUS ==========");
+        int availableSlot = MAX_PARKING - parkingCount;
 
-        Serial.print("Distance : ");
-        Serial.print(distanceCM);
-        Serial.println(" cm");
+        Serial.println("===== MONITORING PARKIR =====");
 
-        Serial.print("Vehicle : ");
+        Serial.print("Jumlah Kendaraan : ");
+        Serial.println(parkingCount);
 
-        if (vehicleDetected)
+        Serial.print("Slot Tersedia : ");
+        Serial.println(availableSlot);
+
+        if (parkingCount >= MAX_PARKING)
         {
-            Serial.println("DETECTED");
+            fullParking = true;
+            Serial.println("STATUS : PARKIR PENUH");
         }
         else
         {
-            Serial.println("NOT DETECTED");
+            fullParking = false;
+            Serial.println("STATUS : SLOT TERSEDIA");
         }
 
-        Serial.print("Barrier Gate : ");
-
-        if (gateOpen)
-        {
-            Serial.println("OPEN");
-        }
-        else
-        {
-            Serial.println("CLOSED");
-        }
-
-        Serial.println("================================");
+        Serial.println("=============================");
         Serial.println();
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
 
-// ==========================
-// TASK ALARM
-// ==========================
-void TaskAlarm(void *pvParameters)
+// ===============================
+// TASK LED INDICATOR
+// ===============================
+void TaskIndicator(void *pvParameters)
 {
     while (1)
     {
-        if (vehicleDetected)
+        if (fullParking)
         {
-            tone(BUZZER_PIN, 1000);
-            vTaskDelay(200 / portTICK_PERIOD_MS);
-
-            noTone(BUZZER_PIN);
-            vTaskDelay(200 / portTICK_PERIOD_MS);
+            digitalWrite(LED_RED, HIGH);
+            digitalWrite(LED_GREEN, LOW);
         }
         else
         {
-            noTone(BUZZER_PIN);
+            digitalWrite(LED_RED, LOW);
+            digitalWrite(LED_GREEN, HIGH);
         }
 
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }
 
-// ==========================
+// ===============================
+// TASK BUZZER
+// ===============================
+void TaskBuzzer(void *pvParameters)
+{
+    while (1)
+    {
+        if (fullParking)
+        {
+            tone(BUZZER, 1000);
+
+            vTaskDelay(300 / portTICK_PERIOD_MS);
+
+            noTone(BUZZER);
+
+            vTaskDelay(300 / portTICK_PERIOD_MS);
+        }
+        else
+        {
+            noTone(BUZZER);
+        }
+
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+}
+
+// ===============================
 // SETUP
-// ==========================
+// ===============================
 void setup()
 {
     Serial.begin(115200);
 
-    pinMode(TRIG_PIN, OUTPUT);
-    pinMode(ECHO_PIN, INPUT);
+    pinMode(TRIG_IN, OUTPUT);
+    pinMode(ECHO_IN, INPUT);
+
+    pinMode(TRIG_OUT, OUTPUT);
+    pinMode(ECHO_OUT, INPUT);
 
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_RED, OUTPUT);
 
-    pinMode(BUZZER_PIN, OUTPUT);
+    pinMode(BUZZER, OUTPUT);
 
-    barrierServo.attach(SERVO_PIN);
-
-    barrierServo.write(0);
-
-    // ==========================
+    // ===========================
     // CREATE TASK
-    // ==========================
+    // ===========================
     xTaskCreate(
-        TaskSensor,
-        "Sensor Task",
+        TaskSensorIn,
+        "Sensor In",
         2048,
         NULL,
         1,
         NULL);
 
     xTaskCreate(
-        TaskBarrier,
-        "Barrier Task",
+        TaskSensorOut,
+        "Sensor Out",
         2048,
         NULL,
         1,
@@ -199,26 +221,33 @@ void setup()
 
     xTaskCreate(
         TaskMonitoring,
-        "Monitoring Task",
+        "Monitoring",
         4096,
         NULL,
         1,
         NULL);
 
     xTaskCreate(
-        TaskAlarm,
-        "Alarm Task",
+        TaskIndicator,
+        "Indicator",
+        2048,
+        NULL,
+        1,
+        NULL);
+
+    xTaskCreate(
+        TaskBuzzer,
+        "Buzzer",
         2048,
         NULL,
         1,
         NULL);
 }
 
-// ==========================
+// ===============================
 // LOOP
-// ==========================
+// ===============================
 void loop()
 {
     // kosong karena menggunakan RTOS
 }
-```
