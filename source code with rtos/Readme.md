@@ -215,10 +215,10 @@ void setup()
 }
 
 // ==========================
-```
 // LOOP
 // ==========================
 void loop()
 {
     // kosong karena menggunakan RTOS
 }
+```
